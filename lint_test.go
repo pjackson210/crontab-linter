@@ -68,3 +68,72 @@ func TestLintTooFewFields(t *testing.T) {
 		t.Fatalf("expected a single error, got %v", findings)
 	}
 }
+
+// Repeated values within a field aren't flagged yet - that's a separate
+// roadmap item (warn on duplicate/overlapping values). This test exists so
+// that when that check lands, it fails here rather than going unnoticed.
+func TestLintDuplicateValuesNotYetFlagged(t *testing.T) {
+	findings, err := Lint(strings.NewReader("0,0,0 0 * * * echo hi\n"))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(findings) != 0 {
+		t.Fatalf("expected no findings, got %v", findings)
+	}
+}
+
+func TestLintTrailingCommaInField(t *testing.T) {
+	findings, err := Lint(strings.NewReader("0, 0 * * * echo hi\n"))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(findings) != 1 || findings[0].Severity != SeverityError {
+		t.Fatalf("expected a single error, got %v", findings)
+	}
+	if !strings.Contains(findings[0].Message, "empty value in list") {
+		t.Fatalf("expected an empty value complaint, got %q", findings[0].Message)
+	}
+}
+
+func TestLintDoubleCommaInField(t *testing.T) {
+	findings, err := Lint(strings.NewReader("1,,3 0 * * * echo hi\n"))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(findings) != 1 || findings[0].Severity != SeverityError {
+		t.Fatalf("expected a single error, got %v", findings)
+	}
+	if !strings.Contains(findings[0].Message, "empty value in list") {
+		t.Fatalf("expected an empty value complaint, got %q", findings[0].Message)
+	}
+}
+
+// A bare negative number is parsed as a range with an empty start (the
+// leading "-" is read as a range separator, not a sign), so it's rejected
+// via the range path rather than the plain out-of-bounds path. Either way
+// it's still an error, which is what matters to a caller.
+func TestLintNegativeNumberField(t *testing.T) {
+	findings, err := Lint(strings.NewReader("-5 0 * * * echo hi\n"))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(findings) != 1 || findings[0].Severity != SeverityError {
+		t.Fatalf("expected a single error, got %v", findings)
+	}
+	if !strings.Contains(findings[0].Message, "minute field") {
+		t.Fatalf("expected a minute field complaint, got %q", findings[0].Message)
+	}
+}
+
+func TestLintNegativeStepValue(t *testing.T) {
+	findings, err := Lint(strings.NewReader("*/-5 0 * * * echo hi\n"))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(findings) != 1 || findings[0].Severity != SeverityError {
+		t.Fatalf("expected a single error, got %v", findings)
+	}
+	if !strings.Contains(findings[0].Message, "must be a positive integer") {
+		t.Fatalf("expected a step value complaint, got %q", findings[0].Message)
+	}
+}
