@@ -49,6 +49,18 @@ Each finding is printed as `source:line: severity: message`. The exit code
 is 1 if any line produced an error-level finding, 0 otherwise (warnings
 alone don't fail the run).
 
+Some schedulers (Quartz-derived tools, several Node and Python cron
+libraries) use a 6-field dialect with a leading seconds field. Pass
+`-seconds` to check files in that dialect instead of standard 5-field cron:
+
+```
+$ cronlint -seconds crontab
+```
+
+There's no reliable way to tell the two dialects apart automatically - a
+5-field line with a one-word command has the same field count as a bare
+6-field schedule - so `cronlint` has to be told which one it's reading.
+
 ## Streaming input
 
 `cronlint` reads its input one line at a time with `bufio.Scanner` instead
@@ -59,7 +71,8 @@ without the process's memory footprint growing with it.
 
 ## What it checks today
 
-- field count (5 schedule fields expected, plus an optional command)
+- field count (5 schedule fields expected by default, 6 with `-seconds`,
+  plus an optional command)
 - each field's values and ranges against their valid bounds
 - step values (the `/n` part of `*/15`) being a positive integer
 - unknown `@` macros
@@ -70,7 +83,6 @@ recognized and skipped, matching real crontab syntax.
 
 ## What it doesn't check yet
 
-- the 6-field "with seconds" dialect used by some schedulers
 - vixie-cron extensions like `L`, `W`, and `#` (nth weekday of month)
 - duplicate or overlapping values within a single field
 

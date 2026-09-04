@@ -78,6 +78,18 @@ var fieldDefs = [5]fieldDef{
 	{name: "day of week", min: 0, max: 7, names: weekdayNames}, // 0 and 7 both mean Sunday
 }
 
+// fieldDefsSeconds is the same layout with a leading seconds field, matching
+// the 6-field dialect used by some schedulers (Quartz-derived tools, several
+// Node and Python cron libraries).
+var fieldDefsSeconds = [6]fieldDef{
+	{name: "second", min: 0, max: 59},
+	{name: "minute", min: 0, max: 59},
+	{name: "hour", min: 0, max: 23},
+	{name: "day of month", min: 1, max: 31},
+	{name: "month", min: 1, max: 12, names: monthNames},
+	{name: "day of week", min: 0, max: 7, names: weekdayNames},
+}
+
 var macros = map[string]bool{
 	"@yearly": true, "@annually": true, "@monthly": true, "@weekly": true,
 	"@daily": true, "@midnight": true, "@hourly": true, "@reboot": true,
@@ -87,17 +99,28 @@ var macros = map[string]bool{
 // which are valid crontab syntax but not schedules.
 var envAssignment = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*\s*=`)
 
-// Lint reads cron schedule lines from r and returns every finding, in the
-// order the lines appear. It reads one line at a time via bufio.Scanner, so
-// input size is bounded by the longest single line, not the total input -
-// a multi-gigabyte crontab-style file costs no more memory than a small one.
+// Lint reads standard 5-field cron schedule lines from r and returns every
+// finding, in the order the lines appear. It reads one line at a time via
+// bufio.Scanner, so input size is bounded by the longest single line, not
+// the total input - a multi-gigabyte crontab-style file costs no more
+// memory than a small one.
 func Lint(r io.Reader) ([]Finding, error) {
+	return lint(r, fieldDefs[:])
+}
+
+// LintSeconds is Lint for the 6-field "with seconds" dialect: second,
+// minute, hour, day of month, month, day of week.
+func LintSeconds(r io.Reader) ([]Finding, error) {
+	return lint(r, fieldDefsSeconds[:])
+}
+
+func lint(r io.Reader, defs []fieldDef) ([]Finding, error) {
 	var findings []Finding
 	scanner := bufio.NewScanner(r)
 	lineNo := 0
 	for scanner.Scan() {
 		lineNo++
-		findings = append(findings, checkLine(lineNo, scanner.Text())...)
+		findings = append(findings, checkLine(lineNo, scanner.Text(), defs)...)
 	}
 	if err := scanner.Err(); err != nil {
 		return findings, err
@@ -105,7 +128,7 @@ func Lint(r io.Reader) ([]Finding, error) {
 	return findings, nil
 }
 
-func checkLine(lineNo int, raw string) []Finding {
+func checkLine(lineNo int, raw string, defs []fieldDef) []Finding {
 	line := strings.TrimSpace(raw)
 	if line == "" || strings.HasPrefix(line, "#") {
 		return nil
@@ -127,16 +150,16 @@ func checkLine(lineNo int, raw string) []Finding {
 		return nil
 	}
 
-	if len(fields) < 5 {
+	if len(fields) < len(defs) {
 		return []Finding{{
 			Line:     lineNo,
 			Severity: SeverityError,
-			Message:  fmt.Sprintf("expected 5 schedule fields, found %d", len(fields)),
+			Message:  fmt.Sprintf("expected %d schedule fields, found %d", len(defs), len(fields)),
 		}}
 	}
 
 	var findings []Finding
-	for i, def := range fieldDefs {
+	for i, def := range defs {
 		for _, problem := range checkField(def, fields[i]) {
 			findings = append(findings, Finding{
 				Line:     lineNo,
@@ -148,8 +171,12 @@ func checkLine(lineNo int, raw string) []Finding {
 
 	// Cron's day-of-month/day-of-week interaction is one of the most common
 	// sources of surprise: when both are restricted, most implementations
-	// fire on either match, not on their intersection.
-	if fields[2] != "*" && fields[4] != "*" {
+	// fire on either match, not on their intersection. Day of month is
+	// always third from last and day of week always last, whether or not a
+	// leading seconds field is present.
+	domField := fields[len(defs)-3]
+	dowField := fields[len(defs)-1]
+	if domField != "*" && dowField != "*" {
 		findings = append(findings, Finding{
 			Line:     lineNo,
 			Severity: SeverityWarning,

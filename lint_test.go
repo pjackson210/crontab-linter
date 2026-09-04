@@ -137,3 +137,59 @@ func TestLintNegativeStepValue(t *testing.T) {
 		t.Fatalf("expected a step value complaint, got %q", findings[0].Message)
 	}
 }
+
+func TestLintSecondsValidLine(t *testing.T) {
+	findings, err := LintSeconds(strings.NewReader("*/15 0 0 1,15 * * /usr/bin/backup\n"))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(findings) != 0 {
+		t.Fatalf("expected no findings, got %v", findings)
+	}
+}
+
+func TestLintSecondsOutOfRangeSecond(t *testing.T) {
+	findings, err := LintSeconds(strings.NewReader("60 0 0 * * * echo hi\n"))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(findings) != 1 || findings[0].Severity != SeverityError {
+		t.Fatalf("expected a single error, got %v", findings)
+	}
+	if !strings.Contains(findings[0].Message, "second field") {
+		t.Fatalf("expected a second field complaint, got %q", findings[0].Message)
+	}
+}
+
+func TestLintSecondsTooFewFields(t *testing.T) {
+	findings, err := LintSeconds(strings.NewReader("0 0 * * * echo hi\n"))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(findings) != 1 || findings[0].Severity != SeverityError {
+		t.Fatalf("expected a single error, got %v", findings)
+	}
+	if !strings.Contains(findings[0].Message, "expected 6 schedule fields") {
+		t.Fatalf("expected a field count complaint, got %q", findings[0].Message)
+	}
+}
+
+func TestLintSecondsDayOfMonthAndWeekBothRestricted(t *testing.T) {
+	findings, err := LintSeconds(strings.NewReader("0 0 0 1 * 1 echo hi\n"))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(findings) != 1 || findings[0].Severity != SeverityWarning {
+		t.Fatalf("expected a single warning, got %v", findings)
+	}
+}
+
+func TestLintSecondsUnknownMacro(t *testing.T) {
+	findings, err := LintSeconds(strings.NewReader("@fortnightly echo hi\n"))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(findings) != 1 || findings[0].Severity != SeverityError {
+		t.Fatalf("expected a single error, got %v", findings)
+	}
+}
