@@ -195,6 +195,13 @@ func checkField(def fieldDef, raw string) []string {
 			continue
 		}
 
+		if problem, handled := checkExtension(def, part); handled {
+			if problem != "" {
+				problems = append(problems, problem)
+			}
+			continue
+		}
+
 		base, step, hasStep := strings.Cut(part, "/")
 		if hasStep {
 			n, err := strconv.Atoi(step)
@@ -224,4 +231,45 @@ func checkField(def fieldDef, raw string) []string {
 		}
 	}
 	return problems
+}
+
+// checkExtension recognizes the vixie-cron/Quartz-derived extensions L, W
+// and # that don't fit the plain value/range/step grammar checkField
+// otherwise handles: L (last day of month, or last weekday-of-week in the
+// month), W (nearest weekday to a given day of month), and # (nth weekday
+// of the month, day-of-week field only). handled reports whether part was
+// one of these forms at all, independent of whether it was valid - callers
+// should fall back to ordinary field checks when handled is false.
+func checkExtension(def fieldDef, part string) (problem string, handled bool) {
+	switch def.name {
+	case "day of month":
+		if part == "L" {
+			return "", true
+		}
+		if day, ok := strings.CutSuffix(part, "W"); ok {
+			if day == "L" {
+				return "", true
+			}
+			if n, err := strconv.Atoi(day); err != nil || n < 1 || n > 31 {
+				return fmt.Sprintf("%q is not a valid day-of-month W expression", part), true
+			}
+			return "", true
+		}
+	case "day of week":
+		if day, ok := strings.CutSuffix(part, "L"); ok && day != "" {
+			if _, ok := def.resolve(day); !ok {
+				return fmt.Sprintf("%q is not a valid day-of-week L expression", part), true
+			}
+			return "", true
+		}
+		if day, nth, ok := strings.Cut(part, "#"); ok {
+			_, dayOK := def.resolve(day)
+			n, err := strconv.Atoi(nth)
+			if !dayOK || err != nil || n < 1 || n > 5 {
+				return fmt.Sprintf("%q is not a valid day-of-week # expression", part), true
+			}
+			return "", true
+		}
+	}
+	return "", false
 }

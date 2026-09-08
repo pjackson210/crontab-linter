@@ -77,13 +77,17 @@ without the process's memory footprint growing with it.
 - step values (the `/n` part of `*/15`) being a positive integer
 - unknown `@` macros
 - day-of-month and day-of-week both being restricted at once (warning)
+- the vixie-cron/Quartz extensions `L` and `W` in the day-of-month field
+  (`L` for last day of the month, `15W` for the nearest weekday to the
+  15th, `LW` for the last weekday of the month), and `L` and `#` in the
+  day-of-week field (`5L` for the last Friday of the month, `MON#2` for
+  the second Monday)
 
 Blank lines, `#` comments, and `NAME=value` environment assignments are
 recognized and skipped, matching real crontab syntax.
 
 ## What it doesn't check yet
 
-- vixie-cron extensions like `L`, `W`, and `#` (nth weekday of month)
 - duplicate or overlapping values within a single field
 
 ## Building

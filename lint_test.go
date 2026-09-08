@@ -69,6 +69,95 @@ func TestLintTooFewFields(t *testing.T) {
 	}
 }
 
+func TestLintDayOfMonthLastDay(t *testing.T) {
+	findings, err := Lint(strings.NewReader("0 0 L * * echo hi\n"))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(findings) != 0 {
+		t.Fatalf("expected no findings, got %v", findings)
+	}
+}
+
+func TestLintDayOfMonthNearestWeekday(t *testing.T) {
+	findings, err := Lint(strings.NewReader("0 0 15W * * echo hi\n"))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(findings) != 0 {
+		t.Fatalf("expected no findings, got %v", findings)
+	}
+}
+
+func TestLintDayOfMonthLastWeekday(t *testing.T) {
+	findings, err := Lint(strings.NewReader("0 0 LW * * echo hi\n"))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(findings) != 0 {
+		t.Fatalf("expected no findings, got %v", findings)
+	}
+}
+
+func TestLintDayOfMonthInvalidNearestWeekday(t *testing.T) {
+	findings, err := Lint(strings.NewReader("0 0 35W * * echo hi\n"))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(findings) != 1 || findings[0].Severity != SeverityError {
+		t.Fatalf("expected a single error, got %v", findings)
+	}
+	if !strings.Contains(findings[0].Message, "W expression") {
+		t.Fatalf("expected a W expression complaint, got %q", findings[0].Message)
+	}
+}
+
+func TestLintDayOfWeekLastOccurrence(t *testing.T) {
+	findings, err := Lint(strings.NewReader("0 0 * * 5L echo hi\n"))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(findings) != 0 {
+		t.Fatalf("expected no findings, got %v", findings)
+	}
+}
+
+func TestLintDayOfWeekNthOccurrence(t *testing.T) {
+	findings, err := Lint(strings.NewReader("0 0 * * MON#2 echo hi\n"))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(findings) != 0 {
+		t.Fatalf("expected no findings, got %v", findings)
+	}
+}
+
+func TestLintDayOfWeekInvalidNthOccurrence(t *testing.T) {
+	findings, err := Lint(strings.NewReader("0 0 * * MON#6 echo hi\n"))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(findings) != 1 || findings[0].Severity != SeverityError {
+		t.Fatalf("expected a single error, got %v", findings)
+	}
+	if !strings.Contains(findings[0].Message, "# expression") {
+		t.Fatalf("expected a # expression complaint, got %q", findings[0].Message)
+	}
+}
+
+func TestLintDayOfWeekInvalidLastOccurrence(t *testing.T) {
+	findings, err := Lint(strings.NewReader("0 0 * * 9L echo hi\n"))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(findings) != 1 || findings[0].Severity != SeverityError {
+		t.Fatalf("expected a single error, got %v", findings)
+	}
+	if !strings.Contains(findings[0].Message, "L expression") {
+		t.Fatalf("expected an L expression complaint, got %q", findings[0].Message)
+	}
+}
+
 // Repeated values within a field aren't flagged yet - that's a separate
 // roadmap item (warn on duplicate/overlapping values). This test exists so
 // that when that check lands, it fails here rather than going unnoticed.
