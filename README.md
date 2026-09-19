@@ -61,6 +61,15 @@ There's no reliable way to tell the two dialects apart automatically - a
 5-field line with a one-word command has the same field count as a bare
 6-field schedule - so `cronlint` has to be told which one it's reading.
 
+Pass `-json` to print each finding as one JSON object per line instead of
+the plain-text format, for feeding into other tools:
+
+```
+$ cronlint -json crontab
+{"file":"crontab","line":5,"severity":"error","message":"minute field \"60\": \"60\" is not a valid minute"}
+{"file":"crontab","line":5,"severity":"error","message":"day of week field \"SAT\": \"SAT\" is not a valid day of week"}
+```
+
 ## Streaming input
 
 `cronlint` reads its input one line at a time with `bufio.Scanner` instead
