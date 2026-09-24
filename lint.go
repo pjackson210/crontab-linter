@@ -167,6 +167,13 @@ func checkLine(lineNo int, raw string, defs []fieldDef) []Finding {
 				Message:  fmt.Sprintf("%s field %q: %s", def.name, fields[i], problem),
 			})
 		}
+		for _, warning := range checkOverlap(def, fields[i]) {
+			findings = append(findings, Finding{
+				Line:     lineNo,
+				Severity: SeverityWarning,
+				Message:  fmt.Sprintf("%s field %q: %s", def.name, fields[i], warning),
+			})
+		}
 	}
 
 	// Cron's day-of-month/day-of-week interaction is one of the most common
@@ -231,6 +238,86 @@ func checkField(def fieldDef, raw string) []string {
 		}
 	}
 	return problems
+}
+
+// checkOverlap flags comma-separated values that repeat or overlap earlier
+// ones in the same field, such as "0,0,0" or "1-5,3-8". It's a warning
+// rather than an error: the schedule still runs, it just has redundant
+// entries that are almost always a typo rather than intentional. Parts that
+// don't reduce to a plain value, range, or step (L/W/# extensions, or values
+// checkField has already rejected) are silently skipped, since expandField
+// can't assign them a meaningful set of values.
+func checkOverlap(def fieldDef, raw string) []string {
+	var problems []string
+	seen := make(map[int]string)
+	for _, part := range strings.Split(raw, ",") {
+		if part == "" {
+			continue
+		}
+		vals, ok := expandField(def, part)
+		if !ok {
+			continue
+		}
+		for _, v := range vals {
+			if prev, dup := seen[v]; dup {
+				problems = append(problems, fmt.Sprintf("value %d in %q is already covered by %q", v, part, prev))
+				break
+			}
+		}
+		for _, v := range vals {
+			if _, exists := seen[v]; !exists {
+				seen[v] = part
+			}
+		}
+	}
+	return problems
+}
+
+// expandField returns every value a single comma-separated part denotes -
+// e.g. "3" -> [3], "1-3" -> [1,2,3], "*/15" on a minute field ->
+// [0,15,30,45] - so checkOverlap can compare parts by the values they cover
+// rather than by their literal text. ok is false for anything checkField
+// would already reject, and for forms expandField can't reduce to a plain
+// integer set (day-of-month/day-of-week's L, W and # extensions).
+func expandField(def fieldDef, part string) ([]int, bool) {
+	base, stepStr, hasStep := strings.Cut(part, "/")
+	step := 1
+	if hasStep {
+		n, err := strconv.Atoi(stepStr)
+		if err != nil || n <= 0 {
+			return nil, false
+		}
+		step = n
+	}
+
+	var lo, hi int
+	if base == "*" {
+		lo, hi = def.min, def.max
+	} else if l, h, isRange := strings.Cut(base, "-"); isRange {
+		loVal, loOK := def.resolve(l)
+		hiVal, hiOK := def.resolve(h)
+		if !loOK || !hiOK || loVal > hiVal {
+			return nil, false
+		}
+		lo, hi = loVal, hiVal
+	} else {
+		v, ok := def.resolve(base)
+		if !ok {
+			return nil, false
+		}
+		if !hasStep {
+			return []int{v}, true
+		}
+		// "N/M" with a plain start (not a range) steps from N to the end of
+		// the field's range, matching vixie-cron's interpretation.
+		lo, hi = v, def.max
+	}
+
+	vals := make([]int, 0, (hi-lo)/step+1)
+	for v := lo; v <= hi; v += step {
+		vals = append(vals, v)
+	}
+	return vals, true
 }
 
 // checkExtension recognizes the vixie-cron/Quartz-derived extensions L, W

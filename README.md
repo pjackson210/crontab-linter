@@ -91,13 +91,11 @@ without the process's memory footprint growing with it.
   15th, `LW` for the last weekday of the month), and `L` and `#` in the
   day-of-week field (`5L` for the last Friday of the month, `MON#2` for
   the second Monday)
+- duplicate or overlapping values within a single field, such as `0,0` or
+  `1-5,3-8` (warning)
 
 Blank lines, `#` comments, and `NAME=value` environment assignments are
 recognized and skipped, matching real crontab syntax.
-
-## What it doesn't check yet
-
-- duplicate or overlapping values within a single field
 
 ## Building
 

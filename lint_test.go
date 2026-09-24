@@ -158,11 +158,77 @@ func TestLintDayOfWeekInvalidLastOccurrence(t *testing.T) {
 	}
 }
 
-// Repeated values within a field aren't flagged yet - that's a separate
-// roadmap item (warn on duplicate/overlapping values). This test exists so
-// that when that check lands, it fails here rather than going unnoticed.
-func TestLintDuplicateValuesNotYetFlagged(t *testing.T) {
+func TestLintDuplicateValueInField(t *testing.T) {
 	findings, err := Lint(strings.NewReader("0,0,0 0 * * * echo hi\n"))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(findings) != 2 {
+		t.Fatalf("expected 2 findings, got %d: %v", len(findings), findings)
+	}
+	for _, f := range findings {
+		if f.Severity != SeverityWarning {
+			t.Fatalf("expected a warning, got %+v", f)
+		}
+		if !strings.Contains(f.Message, "already covered by") {
+			t.Fatalf("expected an overlap complaint, got %q", f.Message)
+		}
+	}
+}
+
+func TestLintOverlappingRanges(t *testing.T) {
+	findings, err := Lint(strings.NewReader("0 0 1-5,3-8 * * echo hi\n"))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(findings) != 1 || findings[0].Severity != SeverityWarning {
+		t.Fatalf("expected a single warning, got %v", findings)
+	}
+	if !strings.Contains(findings[0].Message, `value 3 in "3-8" is already covered by "1-5"`) {
+		t.Fatalf("unexpected message: %q", findings[0].Message)
+	}
+}
+
+func TestLintOverlapWithStar(t *testing.T) {
+	findings, err := Lint(strings.NewReader("*,5 0 * * * echo hi\n"))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(findings) != 1 || findings[0].Severity != SeverityWarning {
+		t.Fatalf("expected a single warning, got %v", findings)
+	}
+	if !strings.Contains(findings[0].Message, `value 5 in "5" is already covered by "*"`) {
+		t.Fatalf("unexpected message: %q", findings[0].Message)
+	}
+}
+
+func TestLintOverlappingSteps(t *testing.T) {
+	findings, err := Lint(strings.NewReader("*/15,*/30 0 * * * echo hi\n"))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(findings) != 1 || findings[0].Severity != SeverityWarning {
+		t.Fatalf("expected a single warning, got %v", findings)
+	}
+	if !strings.Contains(findings[0].Message, `value 0 in "*/30" is already covered by "*/15"`) {
+		t.Fatalf("unexpected message: %q", findings[0].Message)
+	}
+}
+
+// L/W/# extensions don't reduce to a plain integer set, so they're exempt
+// from overlap checking even when repeated.
+func TestLintNoOverlapForExtensions(t *testing.T) {
+	findings, err := Lint(strings.NewReader("0 0 * * MON#2,MON#2 echo hi\n"))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(findings) != 0 {
+		t.Fatalf("expected no findings, got %v", findings)
+	}
+}
+
+func TestLintNoOverlapForDistinctValues(t *testing.T) {
+	findings, err := Lint(strings.NewReader("*/15 0 1,15 * * /usr/bin/backup\n"))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
